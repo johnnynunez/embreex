@@ -5,6 +5,7 @@ cimport cython
 from . cimport rtcore as rtc
 from . cimport rtcore_buffer as rtcb
 from . cimport rtcore_ray as rtcr
+from .rtcore_scene cimport EmbreeScene
 from . cimport rtcore_scene as rtcs
 from . cimport rtcore_geometry as rtcg
 from .rtcore cimport Vertex, Triangle

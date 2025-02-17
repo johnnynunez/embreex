@@ -8,23 +8,21 @@ from libcpp cimport bool
 from libcpp.vector cimport vector
 from libcpp.unordered_set cimport unordered_set
 from libcpp.unordered_map cimport unordered_map
-import numpy as np
-import logging
-import numbers
+import numpy as np, numbers, logging
 from . cimport rtcore as rtc
 from . cimport rtcore_buffer as rtcb
 from . cimport rtcore_ray as rtcr
 from . cimport rtcore_scene as rtcs
 from . cimport rtcore_geometry as rtcg
 from .rtcore cimport Vertex, Triangle
-# Importamos el enum y constantes para ray queries
+# Importa el enum y constantes para rayQueryType
 from .rtcore_scene cimport rayQueryType, intersect, occluded, distance
 
 log = logging.getLogger(__name__)
 
 cdef void error_printer(void *userPtr, rtc.RTCError code, const char *_str) noexcept:
     """
-    Callback para errores de Embree.
+    Callback de error para Embree.
     """
     log.error("ERROR CAUGHT IN EMBREE")
     rtc.print_error(code)
@@ -50,7 +48,7 @@ cdef class EmbreeScene:
         if device is None:
             device = rtc.EmbreeDevice()
         self.device = device
-        # Casteamos la función de error al tipo correcto
+        # Se castea la función de error al tipo correcto (noexcept)
         rtc.rtcSetDeviceErrorFunction(device.device, <rtc.RTCErrorFunc>error_printer, NULL)
         self.scene_i = rtcs.rtcNewScene(device.device)
         self.is_committed = 0
@@ -62,7 +60,6 @@ cdef class EmbreeScene:
         return rtcs.rtcGetSceneFlags(self.scene_i)
 
     def set_flags(self, int flags):
-        # Convertir el int a RTCSceneFlags
         rtcs.rtcSetSceneFlags(self.scene_i, <rtcs.RTCSceneFlags>flags)
 
     def commit(self):
@@ -77,7 +74,6 @@ cdef class EmbreeScene:
             rtcs.rtcCommitScene(self.scene_i)
             self.is_committed = 1
 
-        # Obtenemos los bounds; usamos rtc.RTCBounds importado de rtcore
         cdef rtc.RTCBounds bnds
         rtcs.rtcGetSceneBounds(self.scene_i, &bnds)
 
@@ -94,7 +90,7 @@ cdef class EmbreeScene:
 
         cdef int query_type
         if query == 'INTERSECT':
-            query_type = intersect  # de nuestro enum importado
+            query_type = intersect
         elif query == 'OCCLUDED':
             query_type = occluded
         elif query == 'DISTANCE':
@@ -130,7 +126,7 @@ cdef class EmbreeScene:
         if vec_directions.shape[0] == 1:
             vd_step = 0
 
-        # Usamos las funciones de inicialización definidas en rtcs (no en rtcr)
+        # Inicializamos los argumentos usando las funciones definidas en rtcs
         cdef rtcs.RTCIntersectArguments intersect_args
         cdef rtcs.RTCOccludedArguments occluded_args
         rtcs.rtcInitIntersectArguments(&intersect_args)
@@ -181,12 +177,6 @@ cdef class EmbreeScene:
                 return tfars
             else:
                 return intersect_ids
-
-    # Los otros métodos se han corregido de forma similar, asegurándose de:
-    # - Llamar a las funciones de escena (rtc*) a través de rtcs
-    # - Usar las funciones de inicialización de argumentos de rtcs
-    # - Usar la importación de los tipos de NumPy desde "from numpy cimport ..."
-    # - Utilizar el enum importado para rayQueryType
 
     def __dealloc__(self):
         rtcs.rtcReleaseScene(self.scene_i)
