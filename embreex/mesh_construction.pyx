@@ -1,131 +1,290 @@
 # distutils: language=c++
 
-cimport cython
 cimport numpy as np
-from numpy cimport float32_t, float64_t, int32_t
+cimport cython
+from . cimport rtcore as rtc
+from . cimport rtcore_buffer as rtcb
+from . cimport rtcore_ray as rtcr
+from . cimport rtcore_scene as rtcs
+from . cimport rtcore_geometry as rtcg
+from .rtcore cimport Vertex, Triangle
 
-# Importaciones de definiciones de Embree
-from .rtcore cimport RTC_FORMAT_FLOAT3, RTC_FORMAT_UINT3, Vertex, Triangle, RTCDevice
-from .rtcore_geometry cimport RTCBuildQuality, RTC_GEOMETRY_TYPE_TRIANGLE
-from .rtcore_buffer cimport RTC_BUFFER_TYPE_VERTEX, RTC_BUFFER_TYPE_INDEX
-from .rtcore_scene cimport EmbreeScene, RTCScene
-
-# Importamos las tablas de triangulación desde el header correspondiente
 cdef extern from "mesh_construction.h":
     int triangulate_hex[12][3]
     int triangulate_tetra[4][3]
 
-###############################################################################
-# Clase TriangleMesh
-###############################################################################
 cdef class TriangleMesh:
-    """
-    Construye una malla triangular y la agrega a la escena.
+    r'''
 
-    Parámetros
+    This class constructs a polygon mesh with triangular elements and
+    adds it to the scene.
+
+    Parameters
     ----------
-    scene : EmbreeScene
-        Escena de Embree.
-    vertices : np.ndarray
-        Si indices es None, se espera (num_triángulos, 3, 3) (cada triángulo con
-        sus tres vértices). Si se usa indices, debe ser (num_vertices, 3).
-    indices : np.ndarray o None
-        Si es None se asume que 'vertices' ya contiene los 3 vértices de cada triángulo;
-        en caso contrario, debe ser (num_triángulos, 3).
-    build_quality : int
-        Valor de la enumeración RTCBuildQuality (por ejemplo, RTC_BUILD_QUALITY_MEDIUM).
-    """
-    cdef Vertex * vertices
-    cdef Triangle * indices
-    cdef unsigned int meshID
-    cdef RTCGeometry mesh
 
-    def __init__(self, EmbreeScene scene, np.ndarray vertices, np.ndarray indices=None,
-                 int build_quality=RTCBuildQuality.RTC_BUILD_QUALITY_MEDIUM):
+    scene : EmbreeScene
+        This is the scene to which the constructed polygons will be added.
+    vertices : a np.ndarray of floats.
+        This specifies the x, y, and z coordinates of the vertices in
+        the polygon mesh. This should either have the shape
+        (num_triangles, 3, 3), or the shape (num_vertices, 3), depending
+        on the value of the `indices` parameter.
+    indices : either None, or a np.ndarray of ints
+        If None, then vertices must have the shape (num_triangles, 3, 3).
+        If indices is a np.ndarray, then it must have the shape
+        (num_triangles, 3), and `vertices` must have the shape
+        (num_vertices, 3).
+
+    '''
+
+    cdef Vertex* vertices
+    cdef Triangle* indices
+    cdef unsigned int meshID
+    cdef rtcg.RTCGeometry mesh
+
+    def __init__(self,
+        rtcs.EmbreeScene scene,
+        np.ndarray vertices,
+        np.ndarray indices = None,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
         if indices is None:
             self._build_from_flat(scene, vertices, build_quality)
         else:
             self._build_from_indices(scene, vertices, indices, build_quality)
 
-    cdef void _build_from_flat(self, EmbreeScene scene, np.ndarray tri_vertices, int build_quality):
+    cdef void _build_from_flat(
+        self,
+        rtcs.EmbreeScene scene,
+        np.ndarray tri_vertices,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
         cdef int i, j
         cdef int nt = tri_vertices.shape[0]
+        self.mesh = rtcg.rtcNewGeometry(scene.device.device, rtcg.RTC_GEOMETRY_TYPE_TRIANGLE)
+        rtcg.rtcSetGeometryBuildQuality(self.mesh, build_quality)
 
-        # Crear nueva geometría de triángulos
-        self.mesh = rtcNewGeometry(scene.device.device, RTC_GEOMETRY_TYPE_TRIANGLE)
-        rtcSetGeometryBuildQuality(self.mesh, <RTCBuildQuality> build_quality)
-
-        # Reservar buffer para vértices
-        cdef Vertex * verts = <Vertex *> rtcSetNewGeometryBuffer(self.mesh, RTC_BUFFER_TYPE_VERTEX, 0,
-                                                                 RTC_FORMAT_FLOAT3, sizeof(Vertex), nt * 3)
+        cdef Vertex* vertices = <Vertex*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_VERTEX,
+            0,
+            rtc.RTC_FORMAT_FLOAT3,
+            sizeof(Vertex),
+            nt * 3
+        )
         for i in range(nt):
             for j in range(3):
-                verts[i * 3 + j].x = tri_vertices[i, j, 0]
-                verts[i * 3 + j].y = tri_vertices[i, j, 1]
-                verts[i * 3 + j].z = tri_vertices[i, j, 2]
+                vertices[i*3 + j].x = tri_vertices[i,j,0]
+                vertices[i*3 + j].y = tri_vertices[i,j,1]
+                vertices[i*3 + j].z = tri_vertices[i,j,2]
 
-        # Reservar buffer para índices
-        cdef Triangle * tris = <Triangle *> rtcSetNewGeometryBuffer(self.mesh, RTC_BUFFER_TYPE_INDEX, 0,
-                                                                    RTC_FORMAT_UINT3, sizeof(Triangle), nt)
+        cdef Triangle* triangles = <Triangle*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_INDEX,
+            0,
+            rtc.RTC_FORMAT_UINT3,
+            sizeof(Triangle),
+            nt
+        )
         for i in range(nt):
-            tris[i].v0 = i * 3 + 0
-            tris[i].v1 = i * 3 + 1
-            tris[i].v2 = i * 3 + 2
+            triangles[i].v0 = i*3 + 0
+            triangles[i].v1 = i*3 + 1
+            triangles[i].v2 = i*3 + 2
 
-        rtcCommitGeometry(self.mesh)
-        self.meshID = rtcAttachGeometry(<RTCScene> scene.scene_i, self.mesh)
-        self.vertices = verts
-        self.indices = tris
+        rtcg.rtcCommitGeometry(self.mesh)
+        self.meshID = rtcs.rtcAttachGeometry(<rtcs.RTCScene>scene.scene_i, self.mesh)
+        self.vertices = vertices
+        self.indices = triangles
 
-    cdef void _build_from_indices(self, EmbreeScene scene, np.ndarray tri_vertices, np.ndarray tri_indices,
-                                  int build_quality):
+    cdef void _build_from_indices(
+        self,
+        rtcs.EmbreeScene scene,
+        np.ndarray tri_vertices,
+        np.ndarray tri_indices,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
         cdef int i
         cdef int nv = tri_vertices.shape[0]
         cdef int nt = tri_indices.shape[0]
 
-        # Crear nueva geometría de triángulos
-        self.mesh = rtcNewGeometry(scene.device.device, RTC_GEOMETRY_TYPE_TRIANGLE)
-        rtcSetGeometryBuildQuality(self.mesh, <RTCBuildQuality> build_quality)
+        self.mesh = rtcg.rtcNewGeometry(scene.device.device, rtcg.RTC_GEOMETRY_TYPE_TRIANGLE)
+        rtcg.rtcSetGeometryBuildQuality(self.mesh, build_quality)
 
-        # Reservar buffer para vértices
-        cdef Vertex * verts = <Vertex *> rtcSetNewGeometryBuffer(self.mesh, RTC_BUFFER_TYPE_VERTEX, 0,
-                                                                 RTC_FORMAT_FLOAT3, sizeof(Vertex), nv)
+        cdef Vertex* vertices = <Vertex*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_VERTEX,
+            0,
+            rtc.RTC_FORMAT_FLOAT3,
+            sizeof(Vertex),
+            nv
+        )
         for i in range(nv):
-            verts[i].x = tri_vertices[i, 0]
-            verts[i].y = tri_vertices[i, 1]
-            verts[i].z = tri_vertices[i, 2]
+            vertices[i].x = tri_vertices[i, 0]
+            vertices[i].y = tri_vertices[i, 1]
+            vertices[i].z = tri_vertices[i, 2]
 
-        # Reservar buffer para índices
-        cdef Triangle * tris = <Triangle *> rtcSetNewGeometryBuffer(self.mesh, RTC_BUFFER_TYPE_INDEX, 0,
-                                                                    RTC_FORMAT_UINT3, sizeof(Triangle), nt)
+        cdef Triangle* triangles = <Triangle*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_INDEX,
+            0,
+            rtc.RTC_FORMAT_UINT3,
+            sizeof(Triangle),
+            nt
+        )
         for i in range(nt):
-            tris[i].v0 = tri_indices[i][0]
-            tris[i].v1 = tri_indices[i][1]
-            tris[i].v2 = tri_indices[i][2]
+            triangles[i].v0 = tri_indices[i][0]
+            triangles[i].v1 = tri_indices[i][1]
+            triangles[i].v2 = tri_indices[i][2]
 
-        rtcCommitGeometry(self.mesh)
-        self.meshID = rtcAttachGeometry(<RTCScene> scene.scene_i, self.mesh)
-        self.vertices = verts
-        self.indices = tris
+        rtcg.rtcCommitGeometry(self.mesh)
+        self.meshID = rtcs.rtcAttachGeometry(<rtcs.RTCScene>scene.scene_i, self.mesh)
+        self.vertices = vertices
+        self.indices = triangles
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def update_vertices(self, np.ndarray[np.float32_t, ndim=2] new_vertices):
         """
-        Actualiza los vértices y recompila la geometría.
+        Updates the vertices of the mesh and commits the changes.
         """
-        cdef int i, nv = new_vertices.shape[0]
-        cdef Vertex * verts = <Vertex *> rtcGetGeometryBufferData(self.mesh, RTC_BUFFER_TYPE_VERTEX, 0)
+        cdef int i = 0
+        cdef int nv = new_vertices.shape[0]
+        cdef Vertex* vertices = <Vertex*>rtcg.rtcGetGeometryBufferData(self.mesh, rtcb.RTC_BUFFER_TYPE_VERTEX, 0)
         for i in range(nv):
-            verts[i].x = new_vertices[i, 0]
-            verts[i].y = new_vertices[i, 1]
-            verts[i].z = new_vertices[i, 2]
-        rtcUpdateGeometryBuffer(self.mesh, RTC_BUFFER_TYPE_VERTEX, 0)
-        rtcCommitGeometry(self.mesh)
+            vertices[i].x = new_vertices[i, 0]
+            vertices[i].y = new_vertices[i, 1]
+            vertices[i].z = new_vertices[i, 2]
 
-    property mesh_id:
-        def __get__(self):
-            return self.meshID
+        rtcg.rtcUpdateGeometryBuffer(self.mesh, rtcb.RTC_BUFFER_TYPE_VERTEX, 0)
+        rtcg.rtcCommitGeometry(self.mesh)
+
+    @property
+    def mesh_id(self):
+        return self.meshID
 
     def __dealloc__(self):
-        rtcReleaseGeometry(self.mesh)
+        rtcg.rtcReleaseGeometry(self.mesh)
 
-# Note: The `ElementMesh` class would need similar updates, but since it inherits from `TriangleMesh`
+cdef class ElementMesh(TriangleMesh):
+    r'''
+
+    Converts non-triangular meshes (hexahedral or tetrahedral) to triangular meshes.
+
+    Parameters
+    ----------
+    scene : EmbreeScene
+        Scene to add the mesh to.
+    vertices : np.ndarray
+        Vertex positions.
+    indices : np.ndarray
+        Element connectivity, shape (num_elements, 8) for hexahedral or (num_elements, 4) for tetrahedral.
+
+    '''
+
+    def __init__(
+        self,
+        rtcs.EmbreeScene scene,
+        np.ndarray vertices,
+        np.ndarray indices,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
+        if indices.shape[1] == 8:
+            self._build_from_hexahedra(scene, vertices, indices, build_quality)
+        elif indices.shape[1] == 4:
+            self._build_from_tetrahedra(scene, vertices, indices, build_quality)
+        else:
+            raise NotImplementedError("Only hexahedral or tetrahedral meshes are supported.")
+
+    cdef void _build_from_hexahedra(
+        self,
+        rtcs.EmbreeScene scene,
+        np.ndarray quad_vertices,
+        np.ndarray quad_indices,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
+        cdef int i, j
+        cdef int nv = quad_vertices.shape[0]
+        cdef int ne = quad_indices.shape[0]
+        cdef int nt = 12 * ne  # 12 triangles per hexahedron
+
+        self.mesh = rtcg.rtcNewGeometry(scene.device.device, rtcg.RTC_GEOMETRY_TYPE_TRIANGLE)
+        rtcg.rtcSetGeometryBuildQuality(self.mesh, build_quality)
+
+        cdef Vertex* vertices = <Vertex*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_VERTEX,
+            0,
+            rtc.RTC_FORMAT_FLOAT3,
+            sizeof(Vertex),
+            nv
+        )
+        for i in range(nv):
+            vertices[i].x = quad_vertices[i, 0]
+            vertices[i].y = quad_vertices[i, 1]
+            vertices[i].z = quad_vertices[i, 2]
+
+        cdef Triangle* triangles = <Triangle*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_INDEX,
+            0,
+            rtc.RTC_FORMAT_UINT3,
+            sizeof(Triangle),
+            nt
+        )
+        for i in range(ne):
+            for j in range(12):
+                triangles[12*i+j].v0 = quad_indices[i][triangulate_hex[j][0]]
+                triangles[12*i+j].v1 = quad_indices[i][triangulate_hex[j][1]]
+                triangles[12*i+j].v2 = quad_indices[i][triangulate_hex[j][2]]
+
+        rtcg.rtcCommitGeometry(self.mesh)
+        self.meshID = rtcs.rtcAttachGeometry(<rtcs.RTCScene>scene.scene_i, self.mesh)
+        self.vertices = vertices
+        self.indices = triangles
+
+    cdef void _build_from_tetrahedra(
+        self,
+        rtcs.EmbreeScene scene,
+        np.ndarray tetra_vertices,
+        np.ndarray tetra_indices,
+        rtc.RTCBuildQuality build_quality=rtc.RTC_BUILD_QUALITY_MEDIUM
+    ):
+        cdef int i, j
+        cdef int nv = tetra_vertices.shape[0]
+        cdef int ne = tetra_indices.shape[0]
+        cdef int nt = 4 * ne  # 4 triangles per tetrahedron
+
+        self.mesh = rtcg.rtcNewGeometry(scene.device.device, rtcg.RTC_GEOMETRY_TYPE_TRIANGLE)
+        rtcg.rtcSetGeometryBuildQuality(self.mesh, build_quality)
+
+        cdef Vertex* vertices = <Vertex*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_VERTEX,
+            0,
+            rtc.RTC_FORMAT_FLOAT3,
+            sizeof(Vertex),
+            nv
+        )
+        for i in range(nv):
+            vertices[i].x = tetra_vertices[i, 0]
+            vertices[i].y = tetra_vertices[i, 1]
+            vertices[i].z = tetra_vertices[i, 2]
+
+        cdef Triangle* triangles = <Triangle*> rtcg.rtcSetNewGeometryBuffer(
+            self.mesh,
+            rtcb.RTC_BUFFER_TYPE_INDEX,
+            0,
+            rtc.RTC_FORMAT_UINT3,
+            sizeof(Triangle),
+            nt
+        )
+        for i in range(ne):
+            for j in range(4):
+                triangles[4*i+j].v0 = tetra_indices[i][triangulate_tetra[j][0]]
+                triangles[4*i+j].v1 = tetra_indices[i][triangulate_tetra[j][1]]
+                triangles[4*i+j].v2 = tetra_indices[i][triangulate_tetra[j][2]]
+
+        rtcg.rtcCommitGeometry(self.mesh)
+        self.meshID = rtcs.rtcAttachGeometry(<rtcs.RTCScene>scene.scene_i, self.mesh)
+        self.vertices = vertices
+        self.indices = triangles
