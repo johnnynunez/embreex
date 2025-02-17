@@ -1,5 +1,5 @@
 from embreex.mesh_construction import TriangleMesh
-from embreex import rtcore as rtc  # Import the unified rtcore module
+from embreex import rtcore_scene as rtcs
 import sys
 import time
 
@@ -25,10 +25,7 @@ def xplane(x):
 triangles = xplane(0.0) + xplane(1.0) + xplane(2.0) + xplane(3.0)
 triangles = np.array(triangles, "float32")
 
-# Embree 4: Create a device first
-device = rtc.EmbreeDevice()
-scene = rtc.EmbreeScene(device)  # Pass the device to the scene
-
+scene = rtcs.EmbreeScene()
 mesh = TriangleMesh(scene, triangles)
 xgrid = np.linspace(0.0, 3.0, 100)
 tally = np.zeros(len(xgrid), dtype=int)

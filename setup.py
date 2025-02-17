@@ -21,7 +21,7 @@ def ext_modules():
             os.path.join(_cwd, "embree4", "include"),
         ]
         libraries = [
-            "c:/Program Files/Intel/embree4/lib",
+            "C:/Program Files/Intel/embree4/lib",
             os.path.join(_cwd, "embree4", "lib"),
         ]
     else:
