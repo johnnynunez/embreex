@@ -2,10 +2,10 @@
 import os
 import sys
 
-from setuptools import setup
-
+from setuptools import setup  # No need to import Extension here
 from Cython.Build import cythonize
-from numpy import get_include
+import numpy  # Import numpy here
+
 
 # the current working directory
 _cwd = os.path.abspath(os.path.expanduser(os.path.dirname(__file__)))
@@ -16,29 +16,40 @@ def ext_modules():
     if os.name == "nt":
         # embree search locations on windows
         includes = [
-            get_include(),
+            numpy.get_include(),  # Use numpy.get_include()
             "c:/Program Files/Intel/embree4/include",
-            os.path.join(_cwd, "embree4", "include"),
+            # No need for the local embree4/include if the above is correct.
+            # os.path.join(_cwd, "embree4", "include"),
         ]
         libraries = [
-            "C:/Program Files/Intel/embree4/lib",
-            os.path.join(_cwd, "embree4", "lib"),
+            "embree4"  # Just the library name, no path here
         ]
+        library_dirs = [  # library *directories* go here
+            "C:/Program Files/Intel/embree4/lib",
+            # os.path.join(_cwd, "embree4", "lib"), # Only if you *really* have a local copy
+        ]
+
     else:
         # embree search locations on posix
         includes = [
-            get_include(),
+            numpy.get_include(), # Use numpy.get_include()
             "/opt/local/include",
-            os.path.join(_cwd, "embree4", "include"),
+             os.path.join(_cwd, "embree4", "include"),
+
         ]
-        libraries = ["/opt/local/lib", os.path.join(_cwd, "embree4", "lib")]
+        libraries = ["embree4"] # Just the library name
+        library_dirs = ["/opt/local/lib", os.path.join(_cwd, "embree4", "lib")] # library *directories*
 
-    ext_modules = cythonize("embreex/*.pyx", include_path=includes, language_level=2)
+    ext_modules = cythonize(
+        "embreex/*.pyx",
+        include_path=includes,
+        language_level=3,  # Use Python 3 language level
+    )
     for ext in ext_modules:
-        ext.include_dirs = includes
-        ext.library_dirs = libraries
-        ext.libraries = ["embree4"]
-
+        #ext.include_dirs = includes  # Already set in include_path
+        ext.library_dirs = library_dirs  # Correct.
+        ext.libraries = libraries      # Correct.
+        ext.language = "c++" #<- We add this line
     return ext_modules
 
 
