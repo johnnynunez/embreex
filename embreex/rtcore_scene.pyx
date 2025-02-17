@@ -1,4 +1,6 @@
+# distutils: language=c++
 
+# Embree scene.
 cimport cython
 cimport numpy as np
 from libcpp cimport bool
@@ -133,14 +135,22 @@ cdef class EmbreeScene:
             intersect_ids = np.empty(nv, dtype="int32")
             intersect_ids.fill(INVALID_GEOMETRY_ID)
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
 
         cdef rtcr.RTCRayHit ray_hit
         vd_i = 0
         vd_step = 1
         # If vec_directions is 1 long, we won't be updating it.
         if vec_directions.shape[0] == 1: vd_step = 0
+
+        # NEW: Initialize the arguments struct
+        cdef rtcr.RTCIntersectArguments intersect_args
+        cdef rtcr.RTCOccludedArguments occluded_args
+        rtcr.rtcInitIntersectArguments(&intersect_args) #<- initialize args
+        rtcr.rtcInitOccludedArguments(&occluded_args)
+
 
         for i in range(nv):
             ray_hit.ray.org_x = vec_origins[i, 0]
@@ -158,13 +168,14 @@ cdef class EmbreeScene:
             ray_hit.ray.id = i
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
-            # ray_hit.hit.instID = rtcg.RTC_INVALID_GEOMETRY_ID
+            #ray_hit.hit.instID = rtcg.RTC_INVALID_GEOMETRY_ID  Now an array.
             # print("PRE: %d" % ray_hit.hit.geomID)
 
             vd_i += vd_step
 
             if (query_type == intersect) or (query_type == distance):
-                rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+                # NEW: Use the arguments struct
+                rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args)
                 # print("ray_hit.ray.tfar=%s" % ray_hit.ray.tfar)
                 # print("PST: %d" % ray_hit.hit.geomID)
                 # print("PST: %d" % ray_hit.hit.primID)
@@ -185,7 +196,9 @@ cdef class EmbreeScene:
                     Ng[i, 1] = ray_hit.hit.Ng_y
                     Ng[i, 2] = ray_hit.hit.Ng_z
             else:
-                rtcOccluded1(self.scene_i, &ray_ctx, &(ray_hit.ray))
+                # NEW: Use the arguments struct
+
+                rtcOccluded1(self.scene_i, &context, &(ray_hit.ray), &occluded_args)
                 intersect_ids[i] = <int32_t>ray_hit.hit.geomID
 
         if do_dict_return:
@@ -225,8 +238,12 @@ cdef class EmbreeScene:
         cdef hit_struct hit
         hit_stlvec.reserve(max((16, nv)))
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+        #Removed: cdef rtcr.RTCIntersectContext ray_ctx
+        #Removed: rtcr.rtcInitIntersectContext( &ray_ctx)
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
+        cdef rtcr.RTCIntersectArguments intersect_args
+        rtcr.rtcInitIntersectArguments(&intersect_args)
 
         cdef rtcr.RTCRayHit ray_hit
 
@@ -254,7 +271,9 @@ cdef class EmbreeScene:
                 ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
                 ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
 
-                rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+                # NEW: Use the context struct
+                rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args)
+
 
                 if ray_hit.hit.geomID != rtcg.RTC_INVALID_GEOMETRY_ID:
                     if gid_set.find(ray_hit.hit.geomID) == gid_set.end():
@@ -306,8 +325,13 @@ cdef class EmbreeScene:
 
         cdef int nv = vec_origins.shape[0]
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+        # Removed: cdef rtcr.RTCIntersectContext ray_ctx
+        # Removed: rtcr.rtcInitIntersectContext( &ray_ctx)
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
+        cdef rtcr.RTCIntersectArguments intersect_args
+        rtcr.rtcInitIntersectArguments(&intersect_args)
+
 
         cdef rtcr.RTCRayHit ray_hit
 
@@ -330,7 +354,8 @@ cdef class EmbreeScene:
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
 
-            rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+            # NEW: Use context struct
+            rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args)
 
             if ray_hit.hit.geomID != rtcg.RTC_INVALID_GEOMETRY_ID:
                 if hit_counts_map.find(ray_hit.hit.geomID) == hit_counts_map.end():
@@ -491,8 +516,15 @@ cdef class EmbreeSceneExtended(object):
         cdef int nv = vec_origins.shape[0]
         cdef np.ndarray[np.int32_t, ndim=1] intersect_ids = np.empty(nv, dtype="int32")
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+        # Removed: cdef rtcr.RTCIntersectContext ray_ctx
+        # Removed: rtcr.rtcInitIntersectContext( &ray_ctx)
+
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
+
+        cdef rtcr.RTCIntersectArguments intersect_args #<- Define the struct for arguments
+        rtcr.rtcInitIntersectArguments(&intersect_args) #<- and initialize
+
         cdef rtcr.RTCRayHit ray_hit
 
         for i in range(nv):
@@ -511,8 +543,9 @@ cdef class EmbreeSceneExtended(object):
             ray_hit.ray.id = i
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
+            #ray_hit.hit.instID = rtcg.RTC_INVALID_GEOMETRY_ID # Now an array
 
-            rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+            rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args) #<- Pass args
 
             intersect_ids[i] = ray_hit.hit.primID
 
@@ -528,9 +561,13 @@ cdef class EmbreeSceneExtended(object):
     ):
         cdef int nv = vec_origins.shape[0]
         cdef np.float32_t dist = 1e37
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+        cdef rtcr.RTCIntersectArguments intersect_args
+        rtcr.rtcInitIntersectArguments(&intersect_args)
+
+
         cdef rtcr.RTCRayHit ray_hit
 
         for i in range(nv):
@@ -550,7 +587,8 @@ cdef class EmbreeSceneExtended(object):
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
 
-            rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+            rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args)
+
 
             if ray_hit.ray.tfar < dist:
                 dist = ray_hit.ray.tfar
@@ -572,8 +610,11 @@ cdef class EmbreeSceneExtended(object):
         cdef np.ndarray[np.float64_t, ndim=2] normal = np.empty((nv, 3), dtype="float64")
         cdef np.ndarray[np.float64_t, ndim=2] loc = np.empty((nv, 3), dtype="float64")
 
-        cdef rtcr.RTCIntersectContext ray_ctx
-        rtcr.rtcInitIntersectContext( &ray_ctx)
+        cdef rtcr.RTCIntersectContext context
+        rtcr.rtcInitIntersectContext(&context)
+        cdef rtcr.RTCIntersectArguments intersect_args
+        rtcr.rtcInitIntersectArguments(&intersect_args)
+
         cdef rtcr.RTCRayHit ray_hit
 
         for i in range(nv):
@@ -593,7 +634,8 @@ cdef class EmbreeSceneExtended(object):
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
 
-            rtcIntersect1(self.scene_i, &ray_ctx, &ray_hit)
+            rtcIntersect1(self.scene_i, &context, &ray_hit, &intersect_args)
+
 
             primID[i] = ray_hit.hit.primID
 

@@ -1,3 +1,5 @@
+# distutils: language=c++
+
 cimport numpy as np
 cimport cython
 from . cimport rtcore as rtc

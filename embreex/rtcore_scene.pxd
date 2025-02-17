@@ -4,16 +4,18 @@ cimport cython
 cimport numpy as np
 from libcpp cimport bool
 from . cimport rtcore as rtc
-from . cimport rtcore_ray as rtcr
+from . cimport rtcore_ray as rtcr  # Import for ray/hit/context structs
 from . cimport rtcore_geometry as rtcg
+from . cimport rtcore_buffer as rtcb # Added
 
+# Correct header file for Embree 4, and ALL structs and enums needed.
 cdef extern from "embree4/rtcore_scene.h":
 
     ctypedef struct RTCRay
     ctypedef struct RTCRay4
     ctypedef struct RTCRay8
     ctypedef struct RTCRay16
-    ctypedef struct RTCIntersectContext
+    #REMOVE: ctypedef struct RTCIntersectContext  # No longer a direct argument.
 
     ctypedef struct RTCRayHit
     ctypedef struct RTCRayHit4
@@ -26,7 +28,7 @@ cdef extern from "embree4/rtcore_scene.h":
         RTC_SCENE_FLAG_DYNAMIC
         RTC_SCENE_FLAG_COMPACT
         RTC_SCENE_FLAG_ROBUST
-        RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION
+        # REMOVED: RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION  <-- This flag is gone.
 
     cdef enum RTCAlgorithmFlags:
         RTC_INTERSECT1
@@ -35,7 +37,7 @@ cdef extern from "embree4/rtcore_scene.h":
         RTC_INTERSECT16
 
 
-    # ctypedef void* RTCDevice
+    # ctypedef void* RTCDevice  Defined in rtcore.pxd
     ctypedef void* RTCScene
 
     cdef struct RTCBounds
@@ -66,7 +68,7 @@ cdef extern from "embree4/rtcore_scene.h":
 
     # Gets a geometry handle from the scene.
     rtcg.RTCGeometry rtcGetGeometry(RTCScene scene, unsigned int geomID)
-
+    rtcg.RTCGeometry rtcGetGeometryThreadSafe(RTCScene scene, unsigned int geomID) #<-Added
 
     # Commits the scene.
     void rtcCommitScene(RTCScene scene)
@@ -109,17 +111,35 @@ cdef extern from "embree4/rtcore_scene.h":
     # Perform a closest point query with a packet of 4 points with the scene.
     bool rtcPointQuery16(const int* valid, RTCScene scene, rtc.RTCPointQuery16* query, rtc.RTCPointQueryContext* context, rtc.RTCPointQueryFunction queryFunc, void** userPtr)
 
-    # Intersects a single ray with the scene.
-    void rtcIntersect1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit)
+
+
+    # NEW: Add the argument structs.  These are *DEFINITIONS*, not instances.
+    ctypedef struct RTCIntersectArguments:
+        rtcr.RTCIntersectContextFlags flags
+        rtcr.RTCFilterFunctionN filter
+        #void* instStack    # Deprecated
+        #unsigned int instStackSize  # Deprecated
+
+    ctypedef struct RTCOccludedArguments:
+        rtcr.RTCIntersectContextFlags flags
+        rtcr.RTCFilterFunctionN filter
+        #void* instStack     # Deprecated
+        #unsigned int instStackSize # Deprecated
+
+
+      # NEW: Add rtcore_ray.pxd import
+
+    # Intersects a single ray with the scene.  NEW SIGNATURE!
+    void rtcIntersect1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit, RTCIntersectArguments* args)
 
     # Intersects a packet of 4 rays with the scene.
-    void rtcIntersect4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit4* rayhit)
+    void rtcIntersect4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit4* rayhit,  RTCIntersectArguments* args)
 
     # Intersects a packet of 8 rays with the scene.
-    void rtcIntersect8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit8* rayhit)
+    void rtcIntersect8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit8* rayhit,  RTCIntersectArguments* args)
 
     # Intersects a packet of 16 rays with the scene.
-    void rtcIntersect16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit16* rayhit)
+    void rtcIntersect16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit16* rayhit, RTCIntersectArguments* args)
 
     # Intersects a stream of M rays with the scene.
     void rtcIntersect1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit, unsigned int M, size_t byteStride)
@@ -133,17 +153,17 @@ cdef extern from "embree4/rtcore_scene.h":
     # Intersects a stream of M ray packets of size N in SOA format with the scene.
     void rtcIntersectNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayHitNp* rayhit, unsigned int N)
 
-    # Tests a single ray for occlusion with the scene.
-    void rtcOccluded1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray)
+    # Tests a single ray for occlusion with the scene.  NEW SIGNATURE!
+    void rtcOccluded1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray,  RTCOccludedArguments* args)
 
     # Tests a packet of 4 rays for occlusion occluded with the scene.
-    void rtcOccluded4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay4* ray)
+    void rtcOccluded4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay4* ray,  RTCOccludedArguments* args)
 
     # Tests a packet of 8 rays for occlusion with the scene.
-    void rtcOccluded8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay8* ray)
+    void rtcOccluded8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay8* ray,  RTCOccludedArguments* args)
 
     # Tests a packet of 16 rays for occlusion with the scene.
-    void rtcOccluded16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay16* ray)
+    void rtcOccluded16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay16* ray, RTCOccludedArguments* args)
 
     # Tests a stream of M rays for occlusion with the scene.
     void rtcOccluded1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray, unsigned int M, size_t byteStride)
@@ -156,7 +176,8 @@ cdef extern from "embree4/rtcore_scene.h":
 
     # Tests a stream of M ray packets of size N in SOA format for occlusion with the scene.
     void rtcOccludedNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayNp* ray, unsigned int N)
-
+    #Add missing functions from embree documentation
+    void rtcInitIntersectContext(rtcr.RTCIntersectContext* context)
     # collision callback
     cdef struct RTCCollision:
         unsigned int geomID0
@@ -185,4 +206,3 @@ cdef enum rayQueryType:
     intersect,
     occluded,
     distance
-
