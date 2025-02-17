@@ -1,5 +1,4 @@
 # distutils: language=c++
-# Embree scene.
 
 cimport cython
 from numpy cimport int32_t, float32_t, float64_t
@@ -15,19 +14,17 @@ from . cimport rtcore_ray as rtcr
 from . cimport rtcore_scene as rtcs
 from . cimport rtcore_geometry as rtcg
 from .rtcore cimport Vertex, Triangle
-# Importa el enum y constantes para rayQueryType
 from .rtcore_scene cimport rayQueryType, intersect, occluded, distance
 
 log = logging.getLogger(__name__)
 
+# Definición del callback de error (se castea al tipo RTCErrorFunc)
 cdef void error_printer(void *userPtr, rtc.RTCError code, const char *_str) noexcept:
-    """
-    Callback de error para Embree.
-    """
     log.error("ERROR CAUGHT IN EMBREE")
     rtc.print_error(code)
     log.error("ERROR MESSAGE: %s" % _str)
 
+# Estructuras auxiliares para almacenar resultados
 cdef packed struct hit_struct:
     int32_t geomID
     int32_t primID
@@ -39,16 +36,13 @@ cdef packed struct hit_count_struct:
     int32_t count
     float32_t weight
 
+# IMPLEMENTACIÓN DE LA CLASE EmbreeScene
+# (¡No redeclaramos atributos, ya que están en el pxd!)
 cdef class EmbreeScene:
-    cdef rtcs.RTCScene scene_i
-    cdef public int is_committed
-    cdef rtc.EmbreeDevice device
-
     def __init__(self, rtc.EmbreeDevice device=None):
         if device is None:
             device = rtc.EmbreeDevice()
         self.device = device
-        # Se castea la función de error al tipo correcto (noexcept)
         rtc.rtcSetDeviceErrorFunction(device.device, <rtc.RTCErrorFunc>error_printer, NULL)
         self.scene_i = rtcs.rtcNewScene(device.device)
         self.is_committed = 0
@@ -64,19 +58,20 @@ cdef class EmbreeScene:
 
     def commit(self):
         rtcs.rtcCommitScene(self.scene_i)
+        self.is_committed = 1
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
     def run(self, np.ndarray[np.float32_t, ndim=2] vec_origins,
                   np.ndarray[np.float32_t, ndim=2] vec_directions,
                   dists=None, query='INTERSECT', output=None):
+        # Commitimos la escena si es necesario.
         if self.is_committed == 0:
             rtcs.rtcCommitScene(self.scene_i)
             self.is_committed = 1
 
         cdef rtc.RTCBounds bnds
         rtcs.rtcGetSceneBounds(self.scene_i, &bnds)
-
         cdef int nv = vec_origins.shape[0]
         cdef int vd_i, vd_step
         cdef np.ndarray[np.int32_t, ndim=1] intersect_ids
@@ -87,8 +82,8 @@ cdef class EmbreeScene:
         cdef np.ndarray[np.float32_t, ndim=1] v_arr
         cdef np.ndarray[np.float32_t, ndim=2] Ng
         cdef int32_t INVALID_GEOMETRY_ID = rtcg.RTC_INVALID_GEOMETRY_ID
-
         cdef int query_type
+
         if query == 'INTERSECT':
             query_type = intersect
         elif query == 'OCCLUDED':
@@ -96,7 +91,7 @@ cdef class EmbreeScene:
         elif query == 'DISTANCE':
             query_type = distance
         else:
-            raise ValueError("Tipo de consulta '%s' no reconocido. Los aceptados son INTERSECT, OCCLUDED, DISTANCE" % query)
+            raise ValueError("Tipo de consulta '%s' no reconocido." % query)
 
         if dists is None:
             tfars = np.empty(nv, dtype="float32")
@@ -126,7 +121,7 @@ cdef class EmbreeScene:
         if vec_directions.shape[0] == 1:
             vd_step = 0
 
-        # Inicializamos los argumentos usando las funciones definidas en rtcs
+        # Inicializamos los argumentos mediante las funciones definidas en rtcs:
         cdef rtcs.RTCIntersectArguments intersect_args
         cdef rtcs.RTCOccludedArguments occluded_args
         rtcs.rtcInitIntersectArguments(&intersect_args)
@@ -147,7 +142,6 @@ cdef class EmbreeScene:
             ray_hit.ray.id = i
             ray_hit.hit.geomID = rtcg.RTC_INVALID_GEOMETRY_ID
             ray_hit.hit.primID = rtcg.RTC_INVALID_GEOMETRY_ID
-
             vd_i += vd_step
 
             if query_type == intersect or query_type == distance:
