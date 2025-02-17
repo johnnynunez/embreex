@@ -1,34 +1,36 @@
 # rtcore_scene.pxd wrapper
 
 cimport cython
+from numpy cimport int32_t, float32_t, float64_t
 cimport numpy as np
 from libcpp cimport bool
 from . cimport rtcore as rtc
-from . cimport rtcore_ray as rtcr  # Import for ray/hit/context structs
+from . cimport rtcore_ray as rtcr    # Importa las estructuras de ray/hit/context
 from . cimport rtcore_geometry as rtcg
-from . cimport rtcore_buffer as rtcb # Added
+from . cimport rtcore_buffer as rtcb  # Agregado
 
-# Correct header file for Embree 4, and ALL structs and enums needed.
+# Importamos RTCBounds y RTCLinearBounds ya definidos en rtcore.pxd
+from .rtcore cimport RTCBounds, RTCLinearBounds
+
+# Usamos el header correcto para Embree 4
 cdef extern from "embree4/rtcore_scene.h":
-
+    # Ray y hit básicos
     ctypedef struct RTCRay
     ctypedef struct RTCRay4
     ctypedef struct RTCRay8
     ctypedef struct RTCRay16
-   # ctypedef struct RTCIntersectContext  # No longer a direct argument.
 
     ctypedef struct RTCRayHit
     ctypedef struct RTCRayHit4
     ctypedef struct RTCRayHit8
     ctypedef struct RTCRayHit16
 
-    # Scene flags
+    # Scene flags (el flag de context filter ya no existe)
     cpdef enum RTCSceneFlags:
         RTC_SCENE_FLAG_NONE
         RTC_SCENE_FLAG_DYNAMIC
         RTC_SCENE_FLAG_COMPACT
         RTC_SCENE_FLAG_ROBUST
-        # REMOVED: RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION  <-- This flag is gone.
 
     cdef enum RTCAlgorithmFlags:
         RTC_INTERSECT1
@@ -36,173 +38,97 @@ cdef extern from "embree4/rtcore_scene.h":
         RTC_INTERSECT8
         RTC_INTERSECT16
 
-
-    # ctypedef void* RTCDevice  Defined in rtcore.pxd
+    # RTCScene; RTCDevice ya está definido en rtcore.pxd
     ctypedef void* RTCScene
 
-    cdef struct RTCBounds
-    cdef struct RTCLinearBounds
-
-    # Creates a new scene.
+    # Funciones de creación y manejo de escenas
     RTCScene rtcNewScene(rtc.RTCDevice device);
+    rtc.RTCDevice rtcGetSceneDevice(RTCScene hscene);
+    void rtcRetainScene(RTCScene scene);
+    void rtcReleaseScene(RTCScene scene);
 
-    # Returns the device the scene got created in. The reference count of
-    # the device is incremented by this function.
-    rtc.RTCDevice rtcGetSceneDevice(RTCScene hscene)
+    unsigned int rtcAttachGeometry(RTCScene scene, rtcg.RTCGeometry geometry);
+    void rtcAttachGeometryByID(RTCScene scene, rtcg.RTCGeometry geometry, unsigned int geomID);
+    void rtcDetachGeometry(RTCScene scene, unsigned int geomID);
+    rtcg.RTCGeometry rtcGetGeometry(RTCScene scene, unsigned int geomID);
+    rtcg.RTCGeometry rtcGetGeometryThreadSafe(RTCScene scene, unsigned int geomID);
 
-    # Retains the scene (increments the reference count).
-    void rtcRetainScene(RTCScene scene)
+    void rtcCommitScene(RTCScene scene);
+    void rtcJoinCommitScene(RTCScene scene);
 
-    # Releases the scene (decrements the reference count).
-    void rtcReleaseScene(RTCScene scene)
+    # Callback de progreso
+    ctypedef bool (*RTCProgressMonitorFunction)(void* ptr, double n);
+    void rtcSetSceneProgressMonitorFunction(RTCScene scene, RTCProgressMonitorFunction progress, void* ptr);
 
+    void rtcSetSceneBuildQuality(RTCScene scene, rtc.RTCBuildQuality quality);
+    void rtcSetSceneFlags(RTCScene scene, RTCSceneFlags flags);
+    RTCSceneFlags rtcGetSceneFlags(RTCScene scene);
+    void rtcGetSceneBounds(RTCScene scene, RTCBounds* bounds_o);
+    void rtcGetSceneLinearBounds(RTCScene scene, RTCLinearBounds* bounds_o);
 
-    # Attaches the geometry to a scene.
-    unsigned int rtcAttachGeometry(RTCScene scene, rtcg.RTCGeometry geometry)
+    # Funciones de point query (se omiten para brevedad)
 
-    # Attaches the geometry to a scene using the specified geometry ID.
-    void rtcAttachGeometryByID(RTCScene scene, rtcg.RTCGeometry geometry, unsigned int geomID)
-
-    # Detaches the geometry from the scene.
-    void rtcDetachGeometry(RTCScene scene, unsigned int geomID)
-
-    # Gets a geometry handle from the scene.
-    rtcg.RTCGeometry rtcGetGeometry(RTCScene scene, unsigned int geomID)
-    rtcg.RTCGeometry rtcGetGeometryThreadSafe(RTCScene scene, unsigned int geomID) #<-Added
-
-    # Commits the scene.
-    void rtcCommitScene(RTCScene scene)
-
-    # Commits the scene from multiple threads.
-    void rtcJoinCommitScene(RTCScene scene)
-
-
-    # Progress monitor callback function
-    ctypedef bool (*RTCProgressMonitorFunction)(void* ptr, double n)
-
-    # Sets the progress monitor callback function of the scene.
-    void rtcSetSceneProgressMonitorFunction(RTCScene scene, RTCProgressMonitorFunction progress, void* ptr)
-
-    # Sets the build quality of the scene.
-    void rtcSetSceneBuildQuality(RTCScene scene, rtc.RTCBuildQuality quality)
-
-    # Sets the scene flags.
-    void rtcSetSceneFlags(RTCScene scene, RTCSceneFlags flags)
-
-    # Returns the scene flags.
-    RTCSceneFlags rtcGetSceneFlags(RTCScene scene)
-
-    # Returns the axis-aligned bounds of the scene.
-    void rtcGetSceneBounds(RTCScene scene, RTCBounds* bounds_o)
-
-    # Returns the linear axis-aligned bounds of the scene.
-    void rtcGetSceneLinearBounds(RTCScene scene, RTCLinearBounds* bounds_o)
-
-
-    # Perform a closest point query of the scene.
-    bool rtcPointQuery(RTCScene scene, rtc.RTCPointQuery* query, rtc.RTCPointQueryContext* context, rtc.RTCPointQueryFunction queryFunc, void* userPtr)
-
-    # Perform a closest point query with a packet of 4 points with the scene.
-    bool rtcPointQuery4(const int* valid, RTCScene scene, rtc.RTCPointQuery4* query, rtc.RTCPointQueryContext* context, rtc.RTCPointQueryFunction queryFunc, void** userPtr)
-
-    # Perform a closest point query with a packet of 4 points with the scene.
-    bool rtcPointQuery8(const int* valid, RTCScene scene, rtc.RTCPointQuery8* query, rtc.RTCPointQueryContext* context, rtc.RTCPointQueryFunction queryFunc, void** userPtr)
-
-    # Perform a closest point query with a packet of 4 points with the scene.
-    bool rtcPointQuery16(const int* valid, RTCScene scene, rtc.RTCPointQuery16* query, rtc.RTCPointQueryContext* context, rtc.RTCPointQueryFunction queryFunc, void** userPtr)
-
-
-
-    # NEW: Add the argument structs.  These are *DEFINITIONS*, not instances.
+    # Definición de los argumentos para las queries
     ctypedef struct RTCIntersectArguments:
         rtcr.RTCIntersectContextFlags flags
         rtcr.RTCFilterFunctionN filter
-        #void* instStack    # Deprecated in Embree 4
-        #unsigned int instStackSize  # Deprecated in Embree 4
 
     ctypedef struct RTCOccludedArguments:
         rtcr.RTCIntersectContextFlags flags
         rtcr.RTCFilterFunctionN filter
-        #void* instStack     # Deprecated in Embree 4
-        #unsigned int instStackSize # Deprecated in Embree 4
 
+    # Declaramos las funciones de inicialización de argumentos
+    void rtcInitIntersectArguments(RTCIntersectArguments* args);
+    void rtcInitOccludedArguments(RTCOccludedArguments* args);
 
-      # NEW: Add rtcore_ray.pxd import
+    # Funciones de intersección/occlusion (nuevas firmas)
+    void rtcIntersect1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit,
+                       RTCIntersectArguments* args);
+    void rtcIntersect4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit4* rayhit,
+                       RTCIntersectArguments* args);
+    void rtcIntersect8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit8* rayhit,
+                       RTCIntersectArguments* args);
+    void rtcIntersect16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context,
+                        rtcr.RTCRayHit16* rayhit, RTCIntersectArguments* args);
 
-    # Intersects a single ray with the scene.  NEW SIGNATURE!
-    void rtcIntersect1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit, RTCIntersectArguments* args)
+    void rtcIntersect1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit,
+                        unsigned int M, size_t byteStride);
+    void rtcIntersect1Mp(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit** rayhit,
+                         unsigned int M);
+    void rtcIntersectNM(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHitN* rayhit,
+                        unsigned int N, unsigned int M, size_t byteStride);
+    void rtcIntersectNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayHitNp* rayhit,
+                        unsigned int N);
 
-    # Intersects a packet of 4 rays with the scene.
-    void rtcIntersect4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit4* rayhit,  RTCIntersectArguments* args)
+    void rtcOccluded1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray,
+                      RTCOccludedArguments* args);
+    void rtcOccluded4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay4* ray,
+                      RTCOccludedArguments* args);
+    void rtcOccluded8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay8* ray,
+                      RTCOccludedArguments* args);
+    void rtcOccluded16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay16* ray,
+                       RTCOccludedArguments* args);
+    void rtcOccluded1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray,
+                       unsigned int M, size_t byteStride);
+    void rtcOccluded1Mp(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay** ray,
+                        unsigned int M);
+    void rtcOccludedNM(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayN* ray,
+                       unsigned int N, unsigned int M, size_t byteStride);
+    void rtcOccludedNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayNp* ray,
+                       unsigned int N);
 
-    # Intersects a packet of 8 rays with the scene.
-    void rtcIntersect8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit8* rayhit,  RTCIntersectArguments* args)
-
-    # Intersects a packet of 16 rays with the scene.
-    void rtcIntersect16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit16* rayhit, RTCIntersectArguments* args)
-
-    # Intersects a stream of M rays with the scene.
-    void rtcIntersect1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit* rayhit, unsigned int M, size_t byteStride)
-
-    # Intersects a stream of pointers to M rays with the scene.
-    void rtcIntersect1Mp(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHit** rayhit, unsigned int M)
-
-    # Intersects a stream of M ray packets of size N in SOA format with the scene.
-    void rtcIntersectNM(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayHitN* rayhit, unsigned int N, unsigned int M, size_t byteStride)
-
-    # Intersects a stream of M ray packets of size N in SOA format with the scene.
-    void rtcIntersectNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayHitNp* rayhit, unsigned int N)
-
-    # Tests a single ray for occlusion with the scene.  NEW SIGNATURE!
-    void rtcOccluded1(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray,  RTCOccludedArguments* args)
-
-    # Tests a packet of 4 rays for occlusion occluded with the scene.
-    void rtcOccluded4(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay4* ray,  RTCOccludedArguments* args)
-
-    # Tests a packet of 8 rays for occlusion with the scene.
-    void rtcOccluded8(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay8* ray,  RTCOccludedArguments* args)
-
-    # Tests a packet of 16 rays for occlusion with the scene.
-    void rtcOccluded16(const int* valid, RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay16* ray, RTCOccludedArguments* args)
-
-    # Tests a stream of M rays for occlusion with the scene.
-    void rtcOccluded1M(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay* ray, unsigned int M, size_t byteStride)
-
-    # Tests a stream of pointers to M rays for occlusion with the scene.
-    void rtcOccluded1Mp(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRay** ray, unsigned int M)
-
-    # Tests a stream of M ray packets of size N in SOA format for occlusion with the scene.
-    void rtcOccludedNM(RTCScene scene, rtcr.RTCIntersectContext* context, rtcr.RTCRayN* ray, unsigned int N, unsigned int M, size_t byteStride)
-
-    # Tests a stream of M ray packets of size N in SOA format for occlusion with the scene.
-    void rtcOccludedNp(RTCScene scene, rtcr.RTCIntersectContext* context, const rtcr.RTCRayNp* ray, unsigned int N)
-    #Add missing functions from embree documentation
-    void rtcInitIntersectContext(rtcr.RTCIntersectContext* context)
-    # collision callback
-    cdef struct RTCCollision:
+    # Collision detection callback y función
+    ctypedef struct RTCCollision:
         unsigned int geomID0
         unsigned int primID0
         unsigned int geomID1
         unsigned int primID1
 
-    ctypedef void (*RTCCollideFunc) (void* userPtr, RTCCollision* collisions, unsigned int num_collisions)
+    ctypedef void (*RTCCollideFunc)(void* userPtr, RTCCollision* collisions, unsigned int num_collisions);
+    void rtcCollide(RTCScene scene0, RTCScene scene1, RTCCollideFunc callback, void* userPtr);
 
-    # Performs collision detection of two scenes
-    void rtcCollide (RTCScene scene0, RTCScene scene1, RTCCollideFunc callback, void* userPtr)
-
-
-cdef class TestScene:
-    pass
-
-
-cdef class EmbreeScene:
-    cdef RTCScene scene_i
-    # Optional device used if not given, it should be as input of EmbreeScene
-    cdef public int is_committed
-    cdef rtc.EmbreeDevice device
-
-
+# Definición de nuestro enum para ray query (0 = intersect, 1 = occluded, 2 = distance)
 cdef enum rayQueryType:
-    intersect,
-    occluded,
-    distance
+    intersect = 0,
+    occluded = 1,
+    distance = 2
