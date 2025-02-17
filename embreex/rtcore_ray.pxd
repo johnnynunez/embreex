@@ -1,284 +1,201 @@
-# rtcore_ray.pxd wrapper
+# rtcore_ray wrapper for ray query structs.
 
 cimport cython
 cimport numpy as np
 
 cdef extern from "embree4/rtcore_ray.h":
-    # RTCORE_ALIGN(16)  # This macro is no longer needed.  Assume alignment.
 
+    cdef const int RTC_MAX_INSTANCE_LEVEL_COUNT
+
+    # RTCORE_ALIGN(16)
     # This is for a *single* ray
     cdef struct RTCRay:
         # Ray data
-        float org_x  # Embree4 uses explicit members
+        float org_x
         float org_y
         float org_z
-        #float align0  # No longer needed
+        float tnear
 
-        float dir_x  # Explicit members
+        float dir_x
         float dir_y
         float dir_z
-        #float align1
-
-        float tnear
-        float tfar
-
         float time
-        unsigned int mask  # Changed to unsigned int
 
-        # Hit data
-        float Ng_x  # Explicit members, and grouped with u,v
+        float tfar
+        unsigned int mask
+        unsigned int id
+        unsigned int flags
+
+    cdef struct RTCHit:
+        float Ng_x
         float Ng_y
         float Ng_z
-        #float align2
 
-        float u  # Now directly in RTCRay
+        float u
         float v
 
-        int geomID  # Now int, not unsigned int
-        int primID
-        int instID[1]  #  Just the first instance ID.  instID[RTC_MAX_INSTANCE_LEVEL_COUNT] if needed.
+        unsigned int primID
+        unsigned int geomID
+        unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT]
 
-    # This is for a packet of 4 rays
+    cdef struct RTCRayHit:
+        RTCRay ray
+        RTCHit hit
+
+    # Ray structure for a packet of 4 rays
     cdef struct RTCRay4:
-        # Ray data
-        float orgx[4]
-        float orgy[4]
-        float orgz[4]
-        #float align0  # No longer needed
 
-        float dirx[4]
-        float diry[4]
-        float dirz[4]
-
+        float org_x[4]
+        float org_y[4]
+        float org_z[4]
         float tnear[4]
-        float tfar[4]
 
+        float dir_x[4]
+        float dir_y[4]
+        float dir_z[4]
         float time[4]
-        int mask[4]  # still int in RTCRay4/8/16
 
-        # Hit data
-        float Ngx[4]
-        float Ngy[4]
-        float Ngz[4]
+        float tfar[4]
+        unsigned int mask[4]
+        unsigned int id[4]
+        unsigned int flags[4]
+
+    # Hit structure for a packet of 4 rays
+    cdef struct RTCHit4:
+
+        float Ng_x[4]
+        float Ng_y[4]
+        float Ng_z[4]
 
         float u[4]
         float v[4]
 
-        int geomID[4]
-        int primID[4]
-        int instID[4]
+        unsigned int primID[4]
+        unsigned int geomID[4]
+        unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT][4]
 
-    # This is for a packet of 8 rays
+    # Combined ray/hit structure for a packet of 4 rays
+    cdef struct RTCRayHit4:
+
+        RTCRay4 ray;
+        RTCHit4 hit;
+
+    # Ray structure for a packet of 8 rays
     cdef struct RTCRay8:
-        # Ray data
-        float orgx[8]
-        float orgy[8]
-        float orgz[8]
-        #float align0  # No longer needed
-
-        float dirx[8]
-        float diry[8]
-        float dirz[8]
-
+        float org_x[8]
+        float org_y[8]
+        float org_z[8]
         float tnear[8]
-        float tfar[8]
 
+        float dir_x[8]
+        float dir_y[8]
+        float dir_z[8]
         float time[8]
-        int mask[8]
 
-        # Hit data
-        float Ngx[8]
-        float Ngy[8]
-        float Ngz[8]
+        float tfar[8]
+        unsigned int mask[8]
+        unsigned int id[8]
+        unsigned int flags[8]
+
+    # Hit structure for a packet of 8 rays
+    cdef struct RTCHit8:
+
+        float Ng_x[8]
+        float Ng_y[8]
+        float Ng_z[8]
 
         float u[8]
         float v[8]
 
-        int geomID[8]
-        int primID[8]
-        int instID[8]
+        unsigned int primID[8]
+        unsigned int geomID[8]
+        unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT][8]
 
-    # This is for a packet of 16 rays
+    # Combined ray/hit structure for a packet of 8 rays
+    struct RTCRayHit8:
+
+        RTCRay8 ray
+        RTCHit8 hit
+
+
+    # Ray structure for a packet of 16 rays
     cdef struct RTCRay16:
-        # Ray data
-        float orgx[16]
-        float orgy[16]
-        float orgz[16]
-        #float align0   # No longer needed
 
-        float dirx[16]
-        float diry[16]
-        float dirz[16]
-
+        float org_x[16]
+        float org_y[16]
+        float org_z[16]
         float tnear[16]
-        float tfar[16]
 
+        float dir_x[16]
+        float dir_y[16]
+        float dir_z[16]
         float time[16]
-        int mask[16]
 
-        # Hit data
-        float Ngx[16]
-        float Ngy[16]
-        float Ngz[16]
+        float tfar[16]
+        unsigned int mask[16]
+        unsigned int id[16]
+        unsigned int flags[16]
+
+
+    # Hit structure for a packet of 16 rays
+    cdef struct RTCHit16:
+
+        float Ng_x[16]
+        float Ng_y[16]
+        float Ng_z[16]
 
         float u[16]
         float v[16]
 
-        int geomID[16]
-        int primID[16]
-        int instID[16]
-
-    # Combined Ray/Hit Structures (Embree 4)
-    cdef struct RTCRayHit:
-        RTCRay ray
-        RTCHit hit  # Contains u,v,Ng,geomID,primID,instID
-
-    cdef struct RTCHit:  # New in Embree 4 - contains hit information
-        float Ng_x
-        float Ng_y
-        float Ng_z
-        float u
-        float v
-        int geomID
-        int primID
-        int instID[1]  # Just the top level instance ID
+        unsigned int primID[16]
+        unsigned int geomID[16]
+        unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT][16]
 
 
-cdef extern from *:  # Hack for struct forward decls
-    ctypedef struct RTCIntersectArguments
-    ctypedef struct RTCOccludedArguments
+    # Combined ray/hit structure for a packet of 16 rays
+    cdef struct RTCRayHit16:
 
+        RTCRay16 ray
+        RTCHit16 hit
 
-# Combined intersect/occluded arguments (Embree 4 API)
-cdef extern from "embree4/rtcore_ray.h":
-    # New enum for ray query flags
-    cdef enum RTCRayQueryFlags:
-        RTC_RAY_QUERY_FLAG_NONE
-        RTC_RAY_QUERY_FLAG_INCOHERENT
-        RTC_RAY_QUERY_FLAG_COHERENT
-        RTC_RAY_QUERY_FLAG_INVOKE_ARGUMENT_FILTER
+    # Intersection context flags
+    cdef enum RTCIntersectContextFlags:
+        RTC_INTERSECT_CONTEXT_FLAG_NONE
+        RTC_INTERSECT_CONTEXT_FLAG_INCOHERENT
+        RTC_INTERSECT_CONTEXT_FLAG_COHERENT
 
-    cdef enum RTCFeatureFlags:  # New in Embree4
-        RTC_FEATURE_FLAG_NONE
-        RTC_FEATURE_FLAG_MOTION_BLUR
-        RTC_FEATURE_FLAG_TRIANGLE
-        RTC_FEATURE_FLAG_QUAD
-        RTC_FEATURE_FLAG_GRID
-        RTC_FEATURE_FLAG_SUBDIVISION
-        RTC_FEATURE_FLAG_POINT
-        RTC_FEATURE_FLAG_CURVES
-        RTC_FEATURE_FLAG_CONE_LINEAR_CURVE
-        RTC_FEATURE_FLAG_ROUND_LINEAR_CURVE
-        RTC_FEATURE_FLAG_FLAT_LINEAR_CURVE
-        RTC_FEATURE_FLAG_ROUND_BEZIER_CURVE
-        RTC_FEATURE_FLAG_FLAT_BEZIER_CURVE
-        RTC_FEATURE_FLAG_NORMAL_ORIENTED_BEZIER_CURVE
-        RTC_FEATURE_FLAG_ROUND_BSPLINE_CURVE
-        RTC_FEATURE_FLAG_FLAT_BSPLINE_CURVE
-        RTC_FEATURE_FLAG_NORMAL_ORIENTED_BSPLINE_CURVE
-        RTC_FEATURE_FLAG_ROUND_HERMITE_CURVE
-        RTC_FEATURE_FLAG_FLAT_HERMITE_CURVE
-        RTC_FEATURE_FLAG_NORMAL_ORIENTED_HERMITE_CURVE
-        RTC_FEATURE_FLAG_ROUND_CATMULL_ROM_CURVE
-        RTC_FEATURE_FLAG_FLAT_CATMULL_ROM_CURVE
-        RTC_FEATURE_FLAG_NORMAL_ORIENTED_CATMULL_ROM_CURVE
-        RTC_FEATURE_FLAG_SPHERE_POINT
-        RTC_FEATURE_FLAG_DISC_POINT
-        RTC_FEATURE_FLAG_ORIENTED_DISC_POINT
-        RTC_FEATURE_FLAG_ROUND_CURVES
-        RTC_FEATURE_FLAG_FLAT_CURVES
-        RTC_FEATURE_FLAG_NORMAL_ORIENTED_CURVES
-        RTC_FEATURE_FLAG_LINEAR_CURVES
-        RTC_FEATURE_FLAG_BEZIER_CURVES
-        RTC_FEATURE_FLAG_BSPLINE_CURVES
-        RTC_FEATURE_FLAG_HERMITE_CURVES
-        RTC_FEATURE_FLAG_INSTANCE
-        RTC_FEATURE_FLAG_FILTER_FUNCTION_IN_ARGUMENTS
-        RTC_FEATURE_FLAG_FILTER_FUNCTION_IN_GEOMETRY
-        RTC_FEATURE_FLAG_FILTER_FUNCTION
-        RTC_FEATURE_FLAG_USER_GEOMETRY_CALLBACK_IN_ARGUMENTS
-        RTC_FEATURE_FLAG_USER_GEOMETRY_CALLBACK_IN_GEOMETRY
-        RTC_FEATURE_FLAG_USER_GEOMETRY
-        RTC_FEATURE_FLAG_32_BIT_RAY_MASK
-        RTC_FEATURE_FLAG_ALL
+    cdef struct RTCRayN
+    cdef struct RTCRayNp
+    cdef struct RTCHitN
+    cdef struct RTCHitNp
+    cdef struct RTCRayHitN
+    cdef struct RTCRayHitNp
 
-    ctypedef void (*RTCFilterFunctionN)(const struct RTCFilterFunctionNArguments
-    * args
-    )
+    cdef struct RTCIntersectContext
 
-    ctypedef struct RTCFilterFunctionNArguments:
-        int * valid
-        void * geometryUserPtr
-        const struct RTCRayQueryContext
-        * context
-        struct RTCRayN
-        * ray
-        struct RTCHitN
-        * hit
+    # Arguments for RTCFilterFunctionN
+    cdef struct RTCFilterFunctionNArguments:
+
+        int* valid
+        void* geometryUserPtr
+        RTCIntersectContext* context
+        RTCRayN* ray
+        RTCHitN* hit
         unsigned int N
 
-    ctypedef void (*RTCIntersectFunctionN)(const struct RTCIntersectFunctionNArguments
-    * args
-    )
+    # Filter callback function
+    ctypedef void (*RTCFilterFunctionN)(const RTCFilterFunctionNArguments* args)
 
-    ctypedef struct RTCIntersectFunctionNArguments:
-        int * valid
-        void * geometryUserPtr
-        unsigned int primID
-        struct RTCRayQueryContext
-        * context
-        struct RTCRayHitN
-        * rayhit
-        unsigned int N
-        unsigned int geomID
+    # Intersection context passed to intersect/occluded calls
+    cdef struct RTCIntersectContext:
 
-    ctypedef void (*RTCOccludedFunctionN)(const struct RTCOccludedFunctionNArguments
-    * args
-    )
+        RTCIntersectContextFlags flags                     # intersection flags
+        RTCFilterFunctionN filter                          # filter function to execute
 
-    ctypedef struct RTCOccludedFunctionNArguments:
-        int * valid
-        void * geometryUserPtr
-        unsigned int primID
-        struct RTCRayQueryContext
-        * context
-        struct RTCRayN
-        * ray
-        unsigned int N
-        unsigned int geomID
+        # unsigned int instStackSize                         # Number of instances currently on the stack.
+        unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT]  # The current stack of instance ids.
 
-    ctypedef struct RTCIntersectArguments:
-        RTCRayQueryFlags flags
-        RTCFeatureFlags feature_mask
-        struct RTCRayQueryContext
-        * context  # Renamed in Embree 4
-        RTCFilterFunctionN filter
-        RTCIntersectFunctionN intersect  # New in Embree 4
+        # float minWidthDistanceFactor;                      # curve radius is set to this factor times distance to ray origin
 
-    ctypedef struct RTCOccludedArguments:
-        RTCRayQueryFlags flags
-        RTCFeatureFlags feature_mask
-        struct RTCRayQueryContext
-        * context  # Renamed in Embree 4
-        RTCFilterFunctionN filter
-        RTCOccludedFunctionN occluded  # New in Embree 4
+    void rtcInitIntersectContext(RTCIntersectContext* context)
 
-    # New functions to invoke filter functions from geometry callbacks
-    void rtcInvokeIntersectFilterFromGeometry(const struct RTCIntersectFunctionNArguments
-    * args, conststruct
-    RTCFilterFunctionNArguments * filterArgsa
-    )
-    void rtcInvokeOccludedFilterFromGeometry(const struct RTCOccludedFunctionNArguments
-    * args, const
-    struct RTCFilterFunctionNArguments
-    * filterArgs
-    )
-
-    # Ray query context (renamed from RTCIntersectContext)
-    ctypedef struct RTCRayQueryContext:
-        #unsigned int instID[RTC_MAX_INSTANCE_LEVEL_COUNT] # Now in RTCHit
-        pass  # Simplified - other fields not directly needed here.
-
-    void rtcInitIntersectArguments(RTCIntersectArguments * args)
-    void rtcInitOccludedArguments(RTCOccludedArguments * args)
-    void rtcInitRayQueryContext(RTCRayQueryContext * context)

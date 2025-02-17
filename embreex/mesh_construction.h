@@ -1,8 +1,10 @@
+//
 // This array is used to triangulate the hexahedral mesh elements
 // Each element has six faces with two triangles each.
 // The vertex ordering convention is assumed to follow that used
 // here: http://homepages.cae.wisc.edu/~tautges/papers/cnmev3.pdf
 // Note that this is the case for Exodus II data.
+//
 int triangulate_hex[12][3] = {
   {0, 2, 1}, {0, 3, 2}, // Face is 0 3 2 1
   {4, 5, 6}, {4, 6, 7}, // Face is 4 5 6 7
